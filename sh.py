@@ -1,5 +1,6 @@
 #===============================================================================
 # Copyright (C) 2011-2012 by Andrew Moffat
+# Copyright (C) 2014 by Nick Duminsky
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -25,22 +26,14 @@ __version__ = "1.09"
 __project_url__ = "https://github.com/amoffat/sh"
 
 
-
 import platform
-
-if "windows" in platform.system().lower():
-    raise ImportError("sh %s is currently only supported on linux and osx. \
-please install pbs 0.110 (http://pypi.python.org/pypi/pbs) for windows \
-support." % __version__)
-
-
-
 import sys
 IS_PY3 = sys.version_info[0] == 3
 
 import traceback
 import os
 import re
+
 from glob import glob as original_glob
 from types import ModuleType
 from functools import partial
@@ -66,7 +59,6 @@ THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 
 import errno
 import warnings
-
 import pty
 import termios
 import signal
@@ -169,8 +161,10 @@ SIGNALS_THAT_SHOULD_THROW_EXCEPTION = (
 # https://github.com/amoffat/sh/issues/97#issuecomment-10610629
 class CommandNotFound(AttributeError): pass
 
+
 rc_exc_regex = re.compile("(ErrorReturnCode|SignalException)_(\d+)")
 rc_exc_cache = {}
+
 
 def get_rc_exc(rc):
     rc = int(rc)
@@ -188,8 +182,6 @@ def get_rc_exc(rc):
     return exc
 
 
-
-
 def which(program):
     def is_exe(fpath):
         return os.path.exists(fpath) and os.access(fpath, os.X_OK)
@@ -205,6 +197,7 @@ def which(program):
                 return exe_file
 
     return None
+
 
 def resolve_program(program):
     path = which(program)
@@ -229,7 +222,6 @@ def glob(arg):
     return original_glob(arg) or arg
 
 
-
 class Logger(object):
     def __init__(self, name, context=None):
         self.name = name
@@ -252,7 +244,6 @@ class Logger(object):
     def exception(self, msg, *args):
         if not logging_enabled: return
         self.log.exception(self.context, msg % args)
-
 
 
 class RunningCommand(object):
@@ -442,9 +433,6 @@ class RunningCommand(object):
 
     def __int__(self):
         return int(str(self).strip())
-
-
-
 
 
 class Command(object):
@@ -769,12 +757,9 @@ If you're using glob.glob(), please use sh.glob() instead." % self._path, stackl
         return RunningCommand(cmd, call_args, stdin, stdout, stderr)
 
 
-
-
 # used in redirecting
 STDOUT = -1
 STDERR = -2
-
 
 
 # Process open = Popen
@@ -1162,17 +1147,19 @@ class OProc(object):
             return self.exit_code
 
 
-
-
 class DoneReadingStdin(Exception): pass
+
+
 class NoStdinData(Exception): pass
 
 
-
-# this guy is for reading from some input (the stream) and writing to our
-# opened process's stdin fd.  the stream can be a Queue, a callable, something
-# with the "read" method, a string, or an iterable
+# TODO: make __init__(self, *argw, **kwargw)
 class StreamWriter(object):
+    """
+    this guy is for reading from some input (the stream) and writing to our
+    opened process's stdin fd.  the stream can be a Queue, a callable, something
+    with the "read" method, a string, or an iterable
+    """
     def __init__(self, name, process, stream, stdin, bufsize):
         self.name = name
         self.process = weakref.ref(process)
@@ -1189,7 +1176,6 @@ class StreamWriter(object):
         if bufsize == 1: self.bufsize = 1024
         elif bufsize == 0: self.bufsize = 1
         else: self.bufsize = bufsize
-
 
         if isinstance(stdin, Queue):
             log_msg = "queue"
@@ -1444,8 +1430,6 @@ class StreamReader(object):
             self.write_chunk(chunk)
 
 
-
-
 # this is used for feeding in chunks of stdout/stderr, and breaking it up into
 # chunks that will actually be put into the internal buffers.  for example, if
 # you have two processes, one being piped to the other, and you want that,
@@ -1584,8 +1568,6 @@ class StreamBufferer(object):
 
 
 
-
-
 # this allows lookups to names that aren't found in the global scope to be
 # searched for as a program name.  for example, if "ls" isn't found in this
 # module's scope, we consider it a system program and try to find it.
@@ -1672,8 +1654,6 @@ Please import sh or import programs individually.")
         return which(program)
 
 
-
-
 def run_repl(env):
     banner = "\n>> sh v{version}\n>> https://github.com/amoffat/sh\n"
 
@@ -1690,21 +1670,25 @@ def run_repl(env):
     print("")
 
 
-
-
-# this is a thin wrapper around THIS module (we patch sys.modules[__name__]).
-# this is in the case that the user does a "from sh import whatever"
-# in other words, they only want to import certain programs, not the whole
-# system PATH worth of commands.  in this case, we just proxy the
-# import lookup to our Environment class
 class SelfWrapper(ModuleType):
+    """
+    this is a thin wrapper around THIS module (we patch sys.modules[__name__]).
+    this is in the case that the user does a "from sh import whatever"
+    in other words, they only want to import certain programs, not the whole
+    system PATH worth of commands.  in this case, we just proxy the
+    import lookup to our Environment class
+    """
     def __init__(self, self_module, baked_args={}):
         # this is super ugly to have to copy attributes like this,
         # but it seems to be the only way to make reload() behave
         # nicely.  if i make these attributes dynamic lookups in
         # __getattr__, reload sometimes chokes in weird ways...
-        for attr in ["__builtins__", "__doc__", "__name__", "__package__"]:
+        # TODO: why only this attributes are used?
+        for attr in dir(self_module):
             setattr(self, attr, getattr(self_module, attr, None))
+
+        #for attr in ["__builtins__", "__doc__", "__name__", "__package__"]:
+        #    setattr(self, attr, getattr(self_module, attr, None))
 
         # python 3.2 (2.7 and 3.3 work fine) breaks on osx (not ubuntu)
         # if we set this to None.  and 3.3 needs a value for __path__
@@ -1713,11 +1697,13 @@ class SelfWrapper(ModuleType):
         self.env = Environment(globals(), baked_args)
 
     def __setattr__(self, name, value):
-        if hasattr(self, "env"): self.env[name] = value
+        if hasattr(self, "env"):
+            self.env[name] = value
         ModuleType.__setattr__(self, name, value)
 
     def __getattr__(self, name):
-        if name == "env": raise AttributeError
+        if name == "env":
+            raise AttributeError
         return self.env[name]
 
     # accept special keywords argument to define defaults for all operations
@@ -1726,15 +1712,7 @@ class SelfWrapper(ModuleType):
         return SelfWrapper(self.self_module, kwargs)
 
 
-
-
-# we're being run as a stand-alone script
-if __name__ == "__main__":
-    try:
-        arg = sys.argv.pop(1)
-    except:
-        arg = None
-
+def main(arg):
     if arg == "test":
         import subprocess
 
@@ -1763,6 +1741,20 @@ if __name__ == "__main__":
     else:
         env = Environment(globals())
         run_repl(env)
+
+# we're being run as a stand-alone script
+if __name__ == "__main__":
+    try:
+        if "windows" in platform.system().lower():
+            raise ImportError('sh %s is currently only supported on linux and osx. \
+            please install pbs 0.110 (http://pypi.python.org/pypi/pbs) for windows \
+            support.' % __version__)
+        arg = sys.argv.pop(1)
+    except IndexError:
+        arg = None
+    main(arg)
+
+
 
 # we're being imported from somewhere
 else:
